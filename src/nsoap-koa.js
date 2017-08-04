@@ -40,9 +40,10 @@ export default function(app, options = {}) {
         options.parseBody ? options.parseBody(body) : parseBody(body)
       ];
 
-      const context = options.createContext
-        ? options.createContext({ ctx, isContext: () => true })
-        : { ctx, isContext: () => true };
+      const createContext = options.createContext || (x => x);
+      const context = options.appendContext
+        ? createContext({ ctx, isContext: () => true })
+        : [];
 
       try {
         const result = await nsoap(app, strippedPath, dicts, {
@@ -50,10 +51,13 @@ export default function(app, options = {}) {
           prependArgs: options.contextAsFirstArgument,
           args: [context]
         });
-
-        if (!context.handled) {
-          ctx.status = 200;
-          ctx.body = result;
+        if (typeof result === "function") {
+          result.apply(undefined, [ctx]);
+        } else {
+          if (!context.handled) {
+            ctx.status = 200;
+            ctx.body = result;
+          }
         }
       } catch (error) {
         if (!context.handled) {

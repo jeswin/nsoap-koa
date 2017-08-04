@@ -85,9 +85,14 @@ const routes = {
   },
   customContext(context, x, y) {
     return context.z + x + y;
+  },
+  rawHandler(x, y) {
+    return (ctx, next) => {
+      ctx.status = 200;
+      ctx.body = `${x * y}`;
+    };
   }
 };
-
 
 function makeApp(options) {
   const _app = new koa();
@@ -95,7 +100,6 @@ function makeApp(options) {
   _app.use(nsoap(routes, options));
   return _app.listen();
 }
-
 
 //app.get("/about", (req, res) => res.send("Hello"))
 
@@ -229,29 +233,36 @@ describe("NSOAP Koa", () => {
   });
 
   it("Passes context as an argument", async () => {
-    const app = makeApp();
+    const app = makeApp({ appendContext: true });
     const resp = await request(app).get("/funcWithContext(10,20)");
     resp.body.should.equal(30);
   });
 
   it("Passes context as the first argument", async () => {
-    const app = makeApp({ contextAsFirstArgument: true });
+    const app = makeApp({ appendContext: true, contextAsFirstArgument: true });
     const resp = await request(app).get("/funcWithPrependedContext(10,20)");
     resp.body.should.equal(30);
   });
 
   it("Overrides request handling", async () => {
-    const app = makeApp({ contextAsFirstArgument: true });
+    const app = makeApp({ appendContext: true, contextAsFirstArgument: true });
     const resp = await request(app).get("/overrideResponse(10,20)");
     resp.text.should.equal("200");
   });
 
   it("Passes a custom context", async () => {
     const app = makeApp({
+      appendContext: true,
       contextAsFirstArgument: true,
       createContext: args => ({ ...args, z: 10 })
     });
     const resp = await request(app).get("/customContext(10,20)");
     resp.body.should.equal(40);
+  });
+
+  it("Calls a raw handler", async () => {
+    const app = makeApp();
+    const resp = await request(app).get("/rawHandler(10,20)");
+    resp.text.should.equal("200");
   });
 });
