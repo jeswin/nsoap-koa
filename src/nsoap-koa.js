@@ -1,24 +1,55 @@
-import nsoap from "nsoap";
+import nsoap, { RoutingError } from "nsoap";
 
 const identifierRegex = /^[a-zA-Z_$][a-zA-Z_$0-9]*$/;
 
+function wrapValue(val) {
+  return typeof val !== "string"
+    ? val
+    : val === "true" || val === "false"
+      ? val === "true"
+      : identifierRegex.test(val) ? `${val}` : JSON.parse(val);
+}
+
+function parseDict(dict) {
+  return key => {
+    if (typeof dict === "function") {
+      const result = dict(key);
+      if (result.contains) {
+        return { value: wrapValue(result.value) };
+      }
+    } else {
+      if (Object.prototype.hasOwnProperty.call(dict, key)) {
+        const result = dict[key];
+        return { value: wrapValue(result) };
+      }
+    }
+  };
+}
+
 function parseHeaders(headers) {
-  return headers;
+  return parseDict(headers);
 }
 
 function parseQuery(query) {
-  return Object.keys(query).reduce((acc, key) => {
-    const val = query[key];
-    acc[key] =
-      val === "true" || val === "false"
-        ? val === "true"
-        : identifierRegex.test(val) ? `${val}` : JSON.parse(val);
-    return acc;
-  }, {});
+  return parseDict(query);
 }
 
 function parseBody(body) {
-  return body;
+  return body || {};
+}
+
+function parseCookies(cookies) {
+  return parseDict(key => {
+    const item = cookies.get(key);
+    return item
+      ? {
+          contains: true,
+          value: item
+        }
+      : {
+          contains: false
+        };
+  });
 }
 
 export default function(app, options = {}) {
@@ -27,17 +58,25 @@ export default function(app, options = {}) {
 
   return async ctx => {
     const { request, response, req, res } = ctx;
-    const url = ctx.originalUrl;
     const { query, path, headers } = request;
-    const body = options.body ? options.body(ctx) : request.body;
+    const url = ctx.originalUrl;
+
     if (path.startsWith(urlPrefix)) {
+      const body = options.body ? options.getBody(ctx) : request.body;
+      const cookies = options.getCookies
+        ? options.getCookies(ctx)
+        : ctx.cookies;
+
       const strippedPath = path.substring(urlPrefix.length);
       const dicts = [
         options.parseHeaders
           ? options.parseHeaders(headers)
           : parseHeaders(headers),
         options.parseQuery ? options.parseQuery(query) : parseQuery(query),
-        options.parseBody ? options.parseBody(body) : parseBody(body)
+        options.parseBody ? options.parseBody(body) : parseBody(body),
+        options.parseCookies
+          ? options.parseCookies(cookies)
+          : parseCookies(cookies)
       ];
 
       const createContext = options.createContext || (x => x);
@@ -51,7 +90,13 @@ export default function(app, options = {}) {
           prependArgs: options.contextAsFirstArgument,
           args: [context]
         });
-        if (typeof result === "function") {
+        if (result instanceof RoutingError) {
+          if (result.type === "NOT_FOUND") {
+            ctx.throw(404, "Not found.");
+          } else {
+            ctx.throw(500, "Server error.");
+          }
+        } else if (typeof result === "function") {
           result.apply(undefined, [ctx]);
         } else {
           if (!context.handled) {

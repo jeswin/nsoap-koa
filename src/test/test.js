@@ -18,6 +18,12 @@ const routes = {
   binary(x, y) {
     return x + y;
   },
+  divide(x, y) {
+    return x / y;
+  },
+  tripletAdder(x,y,z) {
+    return x + y + z;
+  },
   namespace: {
     binary(x, y) {
       return x + y;
@@ -178,6 +184,33 @@ describe("NSOAP Koa", () => {
     resp.body.should.equal(30);
   });
 
+  it("Accepts arguments in headers", async () => {
+    const app = makeApp();
+    const resp = await request(app)
+      .post("/binary(x,y)")
+      .set("x", 10)
+      .set("y", 20);
+    resp.body.should.equal(30);
+  });
+
+  it("Accepts arguments in cookies", async () => {
+    const app = makeApp();
+    const resp = await request(app)
+      .post("/binary(x,y)")
+      .set('Cookie', ['x=10', 'y=20'])
+    resp.body.should.equal(30);
+  });
+
+  it("Obeys parameter precedence (header, query, body, cookies)", async () => {
+    const app = makeApp();
+    const resp = await request(app)
+      .post("/tripletAdder(x,y,z)?x=2&y=20")
+      .set("x", 1)
+      .set('Cookie', ['x=4', 'y=40', 'z=400'])
+      .send({ x: 3, y: 30, z: 300 })
+    resp.body.should.equal(321);
+  });
+
   it("Adds parenthesis if omitted", async () => {
     const app = makeApp();
     const resp = await request(app).get("/about");
@@ -198,7 +231,7 @@ describe("NSOAP Koa", () => {
 
   it("Infers types", async () => {
     const app = makeApp();
-    const resp = await request(app).get("/infer(true, 20, Hello)");
+    const resp = await request(app).get("/infer(true,20,Hello)");
     resp.body._bool.should.equal(true);
     resp.body._num.should.equal(20);
     resp.body._str.should.equal("Hello");
@@ -264,5 +297,12 @@ describe("NSOAP Koa", () => {
     const app = makeApp();
     const resp = await request(app).get("/rawHandler(10,20)");
     resp.text.should.equal("200");
+  });
+
+  it("Returns 404 if not found", async () => {
+    const app = makeApp();
+    const resp = await request(app).get("/nonExistantFunction(10,20)");
+    resp.status.should.equal(404);
+    resp.text.should.equal("Not found.");
   });
 });
