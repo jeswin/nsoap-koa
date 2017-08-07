@@ -7,9 +7,9 @@ Attempting to explain it without code is futile. Let's go straight to the exampl
 Choose your framework
 
 <ul class="selector">
-  <li><a href="/">Express JS</a></li>
-  <li><a href="/koa.html">Koa JS</a></li>
-  <li><a href="/react.html">React JS</a></li>
+  <li><a href="https://github.com/nsoap-official/nsoap-express">Express JS</a></li>
+  <li><a href="https://github.com/nsoap-official/nsoap-koa">Koa JS</a></li>
+  <li>React JS (Coming soon...)</li>
 </ul>
 
 ## Installation
