@@ -84,6 +84,8 @@ If the argument is passed via the Querystring and it contains spaces or other ch
 curl "http://www.example.com/search(x)?x=%22thomas%20jacob%22"
 ```
 
+
+
 ## Returning a response
 
 Handlers can return the value to be sent to the client. The router will take care of sending it as an HTTP Response.
@@ -534,8 +536,7 @@ app.use(nsoap(myApp, options));
 
 ### onResponseStream(ctx: KoaContext, next: nextMiddleware) : (val: Object) => void
 
-onResponseStream and three sibling methods allow for custom Response Stream Handling. onResponseStreamHeader is called when the headers are received (first yield returns headers) from the generator function.
-onResponseStream is called for each subsequent yielded value. onResponseStreamEnd is called when the last value is returned by the generator. onResponseStreamError is called whenever there is an error.
+onResponseStream and three sibling methods allow for custom Response Stream Handling. onResponseStreamHeader is called when the headers are received (first yield returns headers) from the generator function. onResponseStream is called for each subsequent yielded value. onResponseStreamEnd is called when the last value is returned by the generator. onResponseStreamError is called whenever there is an error.
 
 ```javascript
 const myApp = {
@@ -550,19 +551,20 @@ const myApp = {
   }
 }
 
-function onResponseStreamHeader(req, res) {
-  return val => res.writeHead(200, val);
+function onResponseStreamHeader(ctx) {
+  return val => ctx.res.writeHead(200, val);
 }
 
-function onResponseStream(req, res) {
-  return val => res.write(val);
+function onResponseStream(ctx) {
+  return val => ctx.res.write(val);
 }
 
-function onResponseStreamEnd(req, res) {
-  return val => res.end(val);
+function onResponseStreamEnd(ctx) {
+  return val => ctx.res.end(val);
 }
 
-function onResponseStreamError(req, res, next) {
+function onResponseStreamError(ctx, next) {
+  ctx.body = "";
   return error => next(error);
 }
 
