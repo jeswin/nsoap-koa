@@ -367,7 +367,7 @@ const myApp = {
 }
 ```
 
-## Reading and Writing Streams
+## Reading and writing Request and Response streams
 
 To read or write streams, you can use Raw Request and Response Handling.
 
@@ -533,3 +533,48 @@ function parseCookies(cookies) {
 const options = { parseCookies };
 app.use(nsoap(myApp, options));
 ```
+
+### onResponseStream(ctx: KoaContext, next: nextMiddleware) : (val: Object) => void
+
+onResponseStream and three sibling methods allow for custom Response Stream Handling. onResponseStreamHeader is called when the headers are received (first yield returns headers) from the generator function.
+onResponseStream is called for each subsequent yielded value. onResponseStreamEnd is called when the last value is returned by the generator. onResponseStreamError is called whenever there is an error.
+
+```javascript
+const myApp = {
+  *streamingGreeting() {
+    yield {
+      "Content-Type": "text/plain",
+      "Transfer-Encoding": "chunked"
+    };
+    yield "HELLO";
+    yield "WORLD";
+    return "!!!";
+  }
+}
+
+function onResponseStreamHeader(req, res) {
+  return val => res.writeHead(200, val);
+}
+
+function onResponseStream(req, res) {
+  return val => res.write(val);
+}
+
+function onResponseStreamEnd(req, res) {
+  return val => res.end(val);
+}
+
+function onResponseStreamError(req, res, next) {
+  return error => next(error);
+}
+
+const options = {
+  onResponseStreamHeader,
+  onResponseStream,
+  onResponseStreamEnd,
+  onResponseStreamError
+};
+
+app.use(nsoap(myApp, options));
+```
+

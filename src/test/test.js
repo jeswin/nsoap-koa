@@ -21,7 +21,7 @@ const routes = {
   divide(x, y) {
     return x / y;
   },
-  tripletAdder(x,y,z) {
+  tripletAdder(x, y, z) {
     return x + y + z;
   },
   namespace: {
@@ -73,6 +73,36 @@ const routes = {
       }
     };
   },
+  *generatorFunction(x, y) {
+    yield {
+      "Content-Type": "text/plain",
+      "Transfer-Encoding": "chunked"
+    };
+    yield "HELLO_";
+    yield "WORLD_";
+    yield "THIS_";
+    yield x;
+    return y;
+  },
+  async *asyncGeneratorFunction(x, y) {
+    yield {
+      "Content-Type": "text/plain",
+      "Transfer-Encoding": "chunked"
+    };
+    yield await "HELLO_";
+    yield "WORLD_";
+    yield "THIS_";
+    yield x;
+    return y;
+  },
+  *generatorFunctionWithError(x, y) {
+    yield {
+      "Content-Type": "text/plain",
+      "Transfer-Encoding": "chunked"
+    };
+    yield "HELLO_";
+    throw new Error("Did not work.");
+  },
   funcWithContext(x, y, context) {
     if (!context.isContext()) {
       throw new Error("Invalid invocation of funcWithContext()");
@@ -100,6 +130,32 @@ const routes = {
   }
 };
 
+function getResponseStreamHandlers() {
+  function onResponseStreamHeader(ctx) {
+    return val => ctx.res.writeHead(200, val);
+  }
+
+  function onResponseStream(ctx) {
+    return val => ctx.res.write(val);
+  }
+
+  function onResponseStreamEnd(ctx) {
+    return val => ctx.res.end(val);
+  }
+
+  function onResponseStreamError(ctx, next) {
+    ctx.body = "";
+    return error => next(error);
+  }
+
+  return {
+    onResponseStreamHeader,
+    onResponseStream,
+    onResponseStreamEnd,
+    onResponseStreamError
+  };
+}
+
 function makeApp(options) {
   const _app = new koa();
   _app.use(bodyParser());
@@ -107,7 +163,7 @@ function makeApp(options) {
   return _app.listen();
 }
 
-//app.get("/about", (req, res) => res.send("Hello"))
+//app.get("/about", (ctx) => res.send("Hello"))
 
 describe("NSOAP Koa", () => {
   it("Calls a parameter-less function", async () => {
@@ -197,7 +253,7 @@ describe("NSOAP Koa", () => {
     const app = makeApp();
     const resp = await request(app)
       .post("/binary(x,y)")
-      .set('Cookie', ['x=10', 'y=20'])
+      .set("Cookie", ["x=10", "y=20"]);
     resp.body.should.equal(30);
   });
 
@@ -206,8 +262,8 @@ describe("NSOAP Koa", () => {
     const resp = await request(app)
       .post("/tripletAdder(x,y,z)?x=2&y=20")
       .set("x", 1)
-      .set('Cookie', ['x=4', 'y=40', 'z=400'])
-      .send({ x: 3, y: 30, z: 300 })
+      .set("Cookie", ["x=4", "y=40", "z=400"])
+      .send({ x: 3, y: 30, z: 300 });
     resp.body.should.equal(321);
   });
 
@@ -304,5 +360,31 @@ describe("NSOAP Koa", () => {
     const resp = await request(app).get("/nonExistantFunction(10,20)");
     resp.status.should.equal(404);
     resp.text.should.equal("Not found.");
+  });
+
+  it("Streams with Stream Response Handler", async () => {
+    const streamHandlers = getResponseStreamHandlers();
+    const app = makeApp(streamHandlers);
+    const resp = await request(app).get("/generatorFunction(WORKS_,WELL)");
+    resp.text.should.equal("HELLO_WORLD_THIS_WORKS_WELL");
+  });
+
+  it("Calls non-streaming functions even when streaming is configured", async () => {
+    const streamHandlers = getResponseStreamHandlers();
+    const app = makeApp({
+      ...streamHandlers,
+      streamResponse: true
+    });
+    const resp = await request(app).get("/unary(x)?x=20");
+    resp.body.should.equal(30);
+  });
+
+  it("Handles streaming errors", async () => {
+    const streamHandlers = getResponseStreamHandlers();
+    const app = makeApp(streamHandlers);
+    const resp = await request(app).get(
+      "/generatorFunctionWithError(WORKS_,WELL)"
+    );
+    resp.text.should.equal("HELLO_");
   });
 });

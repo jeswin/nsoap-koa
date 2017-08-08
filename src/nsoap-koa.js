@@ -52,11 +52,27 @@ function parseCookies(cookies) {
   });
 }
 
+function createStreamingCompletionHandler(options, { ctx, next }) {
+  return options.onResponseStream
+    ? {
+        onRoutingError(result) {
+          options.onResponseStreamError(ctx, next)(new Error("Server error."));
+        },
+        onResult(result) {
+          options.onResponseStreamEnd(ctx, next)(result);
+        },
+        onError(error) {
+          options.onResponseStreamError(ctx, next)(error);
+        }
+      }
+    : undefined;
+}
+
 export default function(app, options = {}) {
   const _urlPrefix = options.urlPrefix || "/";
   const urlPrefix = _urlPrefix.endsWith("/") ? _urlPrefix : `${urlPrefix}/`;
 
-  return async ctx => {
+  return async (ctx, next) => {
     const { request, response, req, res } = ctx;
     const { query, path, headers } = request;
     const url = ctx.originalUrl;
@@ -84,29 +100,60 @@ export default function(app, options = {}) {
         ? createContext({ ctx, isContext: () => true })
         : [];
 
+      let isStreaming = false;
+      const streamHandler = options.onResponseStream
+        ? val => {
+            if (!isStreaming) {
+              options.onResponseStreamHeader(ctx, next)(val);
+              isStreaming = true;
+            } else {
+              options.onResponseStream(ctx, next)(val);
+            }
+          }
+        : undefined;
+
+      const streamingCompletionHandler = createStreamingCompletionHandler(
+        options,
+        { ctx, next }
+      );
+
       try {
         const result = await nsoap(app, strippedPath, dicts, {
           index: options.index || "index",
           prependArgs: options.contextAsFirstArgument,
-          args: [context]
+          args: [context],
+          onNextValue: streamHandler
         });
-        if (result instanceof RoutingError) {
-          if (result.type === "NOT_FOUND") {
-            ctx.throw(404, "Not found.");
-          } else {
-            ctx.throw(500, "Server error.");
-          }
-        } else if (typeof result === "function") {
+
+        if (typeof result === "function") {
           result.apply(undefined, [ctx]);
+        } else if (result instanceof RoutingError) {
+          if (isStreaming) {
+            streamingCompletionHandler.onRoutingError(result);
+          } else {
+            if (result.type === "NOT_FOUND") {
+              ctx.throw(404, "Not found.");
+            } else {
+              ctx.throw(500, "Server error.");
+            }
+          }
         } else {
           if (!context.handled) {
-            ctx.status = 200;
-            ctx.body = result;
+            if (isStreaming) {
+              streamingCompletionHandler.onResult(result);
+            } else {
+              ctx.status = 200;
+              ctx.body = result;
+            }
           }
         }
       } catch (error) {
         if (!context.handled) {
-          ctx.throw(400, error);
+          if (isStreaming) {
+            streamingCompletionHandler.onError(error);
+          } else {
+            ctx.throw(400, error);
+          }
         }
       }
     }
