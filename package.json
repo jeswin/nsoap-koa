@@ -1,6 +1,6 @@
 {
   "name": "nsoap-koa",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "author": "Jeswin Kumar<jeswinpk@agilehead.com>",
   "main": "dist/nsoap-koa",
   "scripts": {
@@ -9,7 +9,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "nsoap": "^0.0.15"
+    "nsoap": "^0.0.18"
   },
   "devDependencies": {
     "babel-loader": "*",
